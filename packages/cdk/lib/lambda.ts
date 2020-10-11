@@ -8,7 +8,14 @@ import {
   MockIntegration,
   Cors,
   ContentHandling,
+  EndpointType,
+  DomainName,
 } from "@aws-cdk/aws-apigateway";
+import { Certificate } from "@aws-cdk/aws-certificatemanager";
+import { ARecord, HostedZone, RecordTarget } from "@aws-cdk/aws-route53";
+import { ApiGatewayDomain } from "@aws-cdk/aws-route53-targets";
+
+import { APIG } from "./config";
 
 export class Lambda extends cdk.Stack {
   constructor(scope: cdk.Construct, id: string, props?: cdk.StackProps) {
@@ -38,6 +45,8 @@ export class Lambda extends cdk.Stack {
       allowOrigins: Cors.ALL_ORIGINS,
       //allowMethods: Cors.ALL_METHODS, //["GET", "POST", "OPTIONS"] ALL_METHODSはdefaultぽい
       statusCode: 200,
+      allowHeaders: ["content-type"],
+      allowCredentials: true,
     };
     const defaultMethodOptions = {
       requestParameters: { "method.request.path.proxy": true },
@@ -75,6 +84,7 @@ export class Lambda extends cdk.Stack {
     const toolApi = new RestApi(this, "tool api", {
       restApiName: "Tool API",
       defaultCorsPreflightOptions,
+      endpointTypes: [EndpointType.REGIONAL],
       //defaultMethodOptions,
     });
 
@@ -99,11 +109,13 @@ export class Lambda extends cdk.Stack {
     //   proxy: false,
     // });
 
-    //const playgroundIntegration = new LambdaIntegration(playgroundFunction);
-
     const playgroundIntegration = new LambdaIntegration(playgroundFunction, {
-      integrationResponses,
+      //contentHandling: ContentHandling.CONVERT_TO_BINARY,
     });
+
+    // const playgroundIntegration = new LambdaIntegration(playgroundFunction, {
+    //   integrationResponses,
+    // });
 
     toolApi.root.addMethod("ANY", toolIntegration);
     const toolResource = toolApi.root.addResource("{proxy+}");
@@ -112,47 +124,32 @@ export class Lambda extends cdk.Stack {
 
     const playgroundResource = playgroundApi.root.addResource("{proxy+}");
     playgroundResource.addMethod("ANY", playgroundIntegration, {
-      methodResponses,
+      //methodResponses,
     });
     //addCorsOptions(playgroundResource);
-  }
-}
 
-export function addCorsOptions(apiResource: IResource) {
-  apiResource.addMethod(
-    "ANY",
-    new MockIntegration({
-      integrationResponses: [
-        {
-          statusCode: "200",
-          responseParameters: {
-            "method.response.header.Access-Control-Allow-Headers":
-              "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'",
-            "method.response.header.Access-Control-Allow-Origin": "'*'",
-            "method.response.header.Access-Control-Allow-Credentials":
-              "'false'",
-            "method.response.header.Access-Control-Allow-Methods":
-              "'OPTIONS,GET,PUT,POST,DELETE'",
-          },
-        },
-      ],
-      passthroughBehavior: PassthroughBehavior.NEVER,
-      requestTemplates: {
-        "application/json": JSON.stringify({ statusCode: 200 }),
-      },
-    }),
-    {
-      methodResponses: [
-        {
-          statusCode: "200",
-          responseParameters: {
-            "method.response.header.Access-Control-Allow-Headers": true,
-            "method.response.header.Access-Control-Allow-Methods": true,
-            "method.response.header.Access-Control-Allow-Credentials": true,
-            "method.response.header.Access-Control-Allow-Origin": true,
-          },
-        },
-      ],
-    }
-  );
+    // const zone = HostedZone.fromHostedZoneAttributes(this, "mitsuna", {
+    //   hostedZoneId: APIG.HOSTED_ZONE_ID,
+    //   zoneName: "ap-northeast-1",
+    // });
+    const hostedZone = HostedZone.fromLookup(this, "mitsuna", {
+      domainName: "mitsuna.dev",
+    });
+
+    const playgroundDomain = new DomainName(this, "CustomDomain", {
+      domainName: APIG.DOMAIN_NAME_PLAYGROUND,
+      certificate: Certificate.fromCertificateArn(
+        this,
+        "Certificate",
+        APIG.CERTIFICATE_ARN
+      ),
+      endpointType: EndpointType.REGIONAL,
+    });
+
+    new ARecord(this, "SampleARecod", {
+      zone: hostedZone,
+      recordName: APIG.DOMAIN_NAME_PLAYGROUND,
+      target: RecordTarget.fromAlias(new ApiGatewayDomain(playgroundDomain)),
+    });
+  }
 }

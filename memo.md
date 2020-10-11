@@ -13,3 +13,6 @@ https://github.com/apollographql/apollo-server/issues/2389
 
 playground の設定？
 https://github.com/apollographql/apollo-server/issues/1571
+
+aws-serverless-express
+https://github.com/awslabs/aws-serverless-express

@@ -3,7 +3,7 @@ import express from "express";
 import { ApolloServer, gql } from "apollo-server-express";
 import { resolvers } from "./resolvers";
 import { formatError } from "./util";
-import compression from "compression";
+//import compression from "compression";
 
 function getTypeDefs() {
   const schemaPath = "src/schema/schema.gql";
@@ -25,7 +25,7 @@ export function createApp() {
 
   //@ts-ignore
   const app = express();
-  app.use(compression());
+  //app.use(compression());
   server.applyMiddleware({
     app,
   });
