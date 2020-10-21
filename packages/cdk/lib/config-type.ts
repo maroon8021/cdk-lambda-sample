@@ -11,4 +11,5 @@ export type APIG_TYPE = {
 export type CONFIG_TYPE = {
   account: string;
   region: string;
+  CERTIFICATE_AUTHORITY_ARN: string;
 };

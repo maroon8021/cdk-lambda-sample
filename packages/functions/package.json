@@ -16,7 +16,9 @@
     "build-schema:convertenum": "replace 'export enum GQL' 'export const enum GQL' src/schema/index.d.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-acm-pca-node": "^0.1.0-preview.2",
     "apollo-server-express": "^2.18.1",
+    "aws-sdk": "^2.773.0",
     "aws-serverless-express": "^3.3.8",
     "express": "^4.17.1"
   },

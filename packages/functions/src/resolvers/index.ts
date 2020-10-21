@@ -1,8 +1,9 @@
 import { IResolvers } from "apollo-server-express";
-import { app } from "../application-services/";
+import { app, exec } from "../application-services/";
 
 const Query: any = {
   app: () => app(),
+  exec: () => exec(),
 };
 
 const Mutation: any = {

@@ -16,3 +16,9 @@ https://github.com/apollographql/apollo-server/issues/1571
 
 aws-serverless-express
 https://github.com/awslabs/aws-serverless-express
+
+yum がいない
+https://qiita.com/white_aspara25/items/5f586911cbc0006695d9
+
+lambda の中で怒られる
+https://qiita.com/namkim/items/3edb9abe3871963bf0f7

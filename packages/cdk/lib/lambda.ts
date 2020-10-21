@@ -11,15 +11,82 @@ import {
   EndpointType,
   DomainName,
 } from "@aws-cdk/aws-apigateway";
-import { Certificate } from "@aws-cdk/aws-certificatemanager";
+import {
+  Certificate,
+  DnsValidatedCertificate,
+  ValidationMethod,
+} from "@aws-cdk/aws-certificatemanager";
 import { ARecord, HostedZone, RecordTarget } from "@aws-cdk/aws-route53";
 import { ApiGatewayDomain } from "@aws-cdk/aws-route53-targets";
+import {
+  Role,
+  IRole,
+  ServicePrincipal,
+  PolicyStatement,
+  ManagedPolicy,
+} from "@aws-cdk/aws-iam";
 
-import { APIG } from "./config";
+import { APIG, CONFIG } from "./config";
+import { BundlingDockerImage, Duration } from "@aws-cdk/core";
+const { CERTIFICATE_AUTHORITY_ARN } = CONFIG;
+
+// usr/bin には yum がない
+const command: string[] = [
+  //"bash -c /var/lib/yum -v",
+  "bash",
+  "-c",
+  `
+  echo ----- && 
+  echo $PATH && 
+  echo ----- && 
+  cd / &&  
+  cp -rf ./asset-input/* ./asset-output && 
+  cp -rf ./bin/make ./asset-output &&
+  cp -rf ./bin/openssl ./asset-output &&
+  cp -rf ./bin/jq ./asset-output && 
+  ls /asset-output`,
+
+  // find ./ -name "*aws*" &&
+  // cp -rf ./usr/local/aws-cli ./asset-output &&
+  // find ./ -name "*aws*" &&
+  // ./usr/local/aws-cli/v2/2.0.57/bin/aws --version &&
+
+  // sh ./asset-output/install.sh &&
+
+  // yum-3.4.3-167.el7.centos.noarch.rpm
+  //"curl --help && cd /bin && ls ./",
+  //ls ./ &&",
+  //"curl --help",
+  //["yum update -y", "yum install make jq"].join(" && "),
+];
 
 export class Lambda extends cdk.Stack {
   constructor(scope: cdk.Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
+
+    const executionLambdaRole = new Role(this, "LambdaRole", {
+      roleName: "lambdaOperationToolExecutionRole",
+      assumedBy: new ServicePrincipal("lambda.amazonaws.com"),
+      managedPolicies: [
+        ManagedPolicy.fromAwsManagedPolicyName(
+          "service-role/AWSLambdaBasicExecutionRole"
+        ),
+        ManagedPolicy.fromAwsManagedPolicyName(
+          "AWSCertificateManagerPrivateCAFullAccess"
+        ),
+      ],
+    });
+
+    // const executionLambdaRole = new Role(this, "LambdaRole", {
+    //   roleName: "lambdaOperationToolExecutionRole",
+    //   assumedBy: new ServicePrincipal("lambda.amazonaws.com"),
+    // });
+    // executionLambdaRole.addToPolicy(
+    //   new PolicyStatement({
+    //     resources: ["*"],
+    //     actions: ["lambda:InvokeFunction"],
+    //   })
+    // );
 
     const toolFunction = new Function(this, "toolFunction", {
       code: AssetCode.fromAsset("../functions/"),
@@ -32,14 +99,30 @@ export class Lambda extends cdk.Stack {
     });
 
     const playgroundFunction = new Function(this, "playgroundFunction", {
-      code: AssetCode.fromAsset("../functions/"),
+      code: AssetCode.fromAsset("../functions/", {
+        bundling: {
+          image: BundlingDockerImage.fromAsset("../functions"),
+          command,
+          user: "root",
+        },
+      }),
       handler: "dist/handler.handler",
+      timeout: Duration.seconds(300),
       runtime: Runtime.NODEJS_12_X,
       environment: {
         NODE_ENV: "development",
         USE_PLAYGROUND: "true",
+        CERTIFICATE_AUTHORITY_ARN,
       },
+      //@ts-ignore
+      role: executionLambdaRole,
     });
+    // .addToRolePolicy(
+    //   new PolicyStatement({
+    //     resources: ["*"],
+    //     actions: ["acm-pca:*"],
+    //   })
+    // );
 
     const defaultCorsPreflightOptions = {
       allowOrigins: Cors.ALL_ORIGINS,
@@ -132,18 +215,26 @@ export class Lambda extends cdk.Stack {
     //   hostedZoneId: APIG.HOSTED_ZONE_ID,
     //   zoneName: "ap-northeast-1",
     // });
+
     const hostedZone = HostedZone.fromLookup(this, "mitsuna", {
       domainName: "mitsuna.dev",
     });
 
+    const certificate = new DnsValidatedCertificate(this, "Certificate", {
+      domainName: APIG.DOMAIN_NAME_PLAYGROUND,
+      hostedZone,
+      validationMethod: ValidationMethod.DNS,
+    });
+
     const playgroundDomain = new DomainName(this, "CustomDomain", {
       domainName: APIG.DOMAIN_NAME_PLAYGROUND,
-      certificate: Certificate.fromCertificateArn(
-        this,
-        "Certificate",
-        APIG.CERTIFICATE_ARN
-      ),
+      certificate: certificate, //Certificate.fromCertificateArn(
+      //   this,
+      //   "Certificate",
+      //   APIG.CERTIFICATE_ARN
+      // ),
       endpointType: EndpointType.REGIONAL,
+      mapping: playgroundApi,
     });
 
     new ARecord(this, "SampleARecod", {
